@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -6,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#242629">
 <title>PIXEL — Магазин</title>
-
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#242629;color:#f1f1f1;font-family:Arial,sans-serif}
@@ -39,7 +37,7 @@ h2{font-size:21px;margin:25px 0 15px}
 .bottom{position:fixed;bottom:0;left:0;right:0;background:#191a1c;padding:13px 16px calc(13px + env(safe-area-inset-bottom));box-shadow:0 -3px 15px #0005;display:flex;justify-content:space-between;align-items:center;z-index:3}
 .bottom button{background:#e5e5e5;color:#171717;border:0;padding:14px 18px;border-radius:13px;font-weight:bold}
 .modal{display:none;position:fixed;inset:0;background:#000b;z-index:5;align-items:flex-end}
-.panel{background:#292b2e;width:100%;max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:20px 17px calc(25px + env(safe-area-inset-bottom))}
+.panel{background:#292b2e;width:100%;max-height:92vh;overflow:auto;border-radius:22px 22px 0 0;padding:20px 17px calc(25px + env(safe-area-inset-bottom))}
 .panel h2{margin-top:5px}
 .close{float:right;border:0;background:#414347;color:white;border-radius:50%;width:36px;height:36px;font-size:20px}
 .cart-line{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #45474a;padding:13px 0;font-size:14px}
@@ -47,6 +45,16 @@ h2{font-size:21px;margin:25px 0 15px}
 .qty button{border:0;background:#45474a;color:white;border-radius:8px;padding:6px 12px}
 .total{font-size:19px;font-weight:bold;margin:18px 0}
 .notice{font-size:12px;color:#aaa;line-height:1.5;margin-top:15px}
+.primary{width:100%;border:0;background:#b6f36b;color:#171717;padding:15px;border-radius:12px;font-weight:bold;font-size:16px;margin-top:12px}
+.primary:disabled{opacity:.55}
+.checkout{display:none;margin-top:22px;border-top:1px solid #45474a;padding-top:10px}
+.field{display:block;margin:14px 0}
+.field span{display:block;font-size:13px;color:#c7c7c7;margin-bottom:7px}
+.field input,.field textarea,.field select{width:100%;padding:14px;border:1px solid #505257;border-radius:11px;background:#35373a;color:white;font-size:16px}
+.field textarea{min-height:80px;resize:vertical}
+.status{font-size:14px;line-height:1.5;margin-top:14px}
+.status.error{color:#ff9b9b}
+.status.success{color:#b6f36b}
 @media(min-width:600px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>
 </head>
@@ -86,11 +94,64 @@ h2{font-size:21px;margin:25px 0 15px}
  <div class="panel">
   <button class="close" onclick="closeCart()">×</button>
   <h2>🛒 Корзина</h2>
+
   <div id="cartItems"></div>
   <div class="total" id="cartTotal">Итого: 0,00 BYN</div>
-  <p class="notice">
-   Корзина работает. Оформление и отправка заказов продавцу
-   будут подключены следующим этапом.
+
+  <button class="primary" id="checkoutStart" type="button" onclick="showCheckout()">
+   Перейти к оформлению
+  </button>
+
+  <form class="checkout" id="checkoutForm">
+   <h2>Оформление заказа</h2>
+
+   <label class="field">
+    <span>Ваше имя *</span>
+    <input name="buyer_name" required minlength="2" maxlength="100"
+     autocomplete="name" placeholder="Как к вам обращаться">
+   </label>
+
+   <label class="field">
+    <span>Телефон или Telegram *</span>
+    <input name="contact" required minlength="3" maxlength="100"
+     autocomplete="tel" placeholder="+375... или @username">
+   </label>
+
+   <label class="field">
+    <span>Способ оплаты *</span>
+    <select name="payment_method" required>
+     <option value="">Выберите способ оплаты</option>
+     <option>Наличными при получении</option>
+     <option>Перевод на карту</option>
+     <option>Другой способ</option>
+    </select>
+   </label>
+
+   <label class="field">
+    <span>Адрес доставки / место получения *</span>
+    <textarea name="delivery_address" required minlength="3" maxlength="500"
+     placeholder="Укажите адрес или удобное место получения"></textarea>
+   </label>
+
+   <label class="field">
+    <span>Комментарий к заказу</span>
+    <textarea name="customer_comment" maxlength="1000"
+     placeholder="Размер, цвет, пожелания (если есть)"></textarea>
+   </label>
+
+   <button class="primary" id="submitOrder" type="submit">
+    Подтвердить заказ
+   </button>
+
+   <div id="orderStatus" class="status" role="status" aria-live="polite"></div>
+
+   <p class="notice">
+    Итоговая стоимость и наличие товаров проверяются при оформлении заказа.
+   </p>
+  </form>
+
+  <p class="notice" id="cartHint">
+   Количество товаров можно изменить кнопками + и −.
   </p>
  </div>
 </div>
@@ -99,10 +160,11 @@ h2{font-size:21px;margin:25px 0 15px}
 import { createClient } from
 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-const db = createClient(
- 'https://iuodcfroelueapetggog.supabase.co',
- 'sb_publishable_9oJI3ki12TygVlpMwPSZ6Q_NyTby9q7'
-);
+const SUPABASE_URL = 'https://iuodcfroelueapetggog.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_9oJI3ki12TygVlpMwPSZ6Q_NyTby9q7';
+const ORDER_URL = SUPABASE_URL + '/functions/v1/place-order';
+
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let products = [];
 let selected = 'Все';
@@ -188,7 +250,7 @@ function render(){
 
  const items = products.filter(p =>
   (selected==='Все' || p.category===selected) &&
-  p.name.toLowerCase().includes(q)
+  (p.name || '').toLowerCase().includes(q)
  );
 
  document.getElementById('sectionTitle').textContent =
@@ -199,30 +261,28 @@ function render(){
   const discount = Number(p.discount_percent || 0);
   const image = /^https:\/\//i.test(p.image_url || '');
 
-  return `
-   <div class="product">
-    ${discount>0
-     ? `<span class="discount">-${Math.round(discount)}%</span>`
-     : ''}
-    ${image
-     ? `<img src="${safe(p.image_url)}" alt="${safe(p.name)}"
-          onerror="this.style.display='none'">`
-     : '<div class="no-image">🛍️</div>'}
-    <div class="info">
-     <div class="name">${safe(p.name)}</div>
-     <div class="desc">${safe(p.description || '')}</div>
-     <div class="price">
-      ${money(price)}
-      ${discount>0
-       ? `<span class="old">${money(p.price)}</span>`
-       : ''}
-     </div>
-     <button class="add" data-add="${safe(p.id)}">
-      Добавить в корзину
-     </button>
+  return `<div class="product">
+   ${discount>0
+    ? `<span class="discount">-${Math.round(discount)}%</span>`
+    : ''}
+   ${image
+    ? `<img src="${safe(p.image_url)}" alt="${safe(p.name)}"
+         onerror="this.style.display='none'">`
+    : '<div class="no-image">🛍️</div>'}
+   <div class="info">
+    <div class="name">${safe(p.name)}</div>
+    <div class="desc">${safe(p.description || '')}</div>
+    <div class="price">
+     ${money(price)}
+     ${discount>0
+      ? `<span class="old">${money(p.price)}</span>`
+      : ''}
     </div>
+    <button class="add" data-add="${safe(p.id)}">
+     Добавить в корзину
+    </button>
    </div>
-  `;
+  </div>`;
  }).join('') || '<p class="empty">Товаров пока нет</p>';
 
  document.querySelectorAll('[data-add]').forEach(button => {
@@ -280,9 +340,9 @@ function updateCart(){
      <div>
       <b>${safe(p.name)}</b><br>${money(finalPrice(p))}
       <div class="qty">
-       <button data-change="${safe(p.id)}" data-delta="-1">−</button>
+       <button type="button" data-change="${safe(p.id)}" data-delta="-1">−</button>
        ${cart[p.id]}
-       <button data-change="${safe(p.id)}" data-delta="1">+</button>
+       <button type="button" data-change="${safe(p.id)}" data-delta="1">+</button>
       </div>
      </div>
      <b>${money(finalPrice(p)*cart[p.id])}</b>
@@ -295,6 +355,13 @@ function updateCart(){
    change(button.dataset.change,Number(button.dataset.delta));
   });
  });
+
+ document.getElementById('checkoutStart').style.display =
+  count() ? 'block' : 'none';
+
+ if(!count()){
+  document.getElementById('checkoutForm').style.display='none';
+ }
 }
 
 function openCart(){
@@ -306,10 +373,116 @@ function closeCart(){
  document.getElementById('modal').style.display='none';
 }
 
+function showCheckout(){
+ if(!count()){
+  alert('Сначала добавьте товары в корзину');
+  return;
+ }
+
+ document.getElementById('checkoutForm').style.display='block';
+
+ document.getElementById('checkoutForm').scrollIntoView({
+  behavior:'smooth',
+  block:'start'
+ });
+}
+
 window.openCart=openCart;
 window.closeCart=closeCart;
+window.showCheckout=showCheckout;
 
 document.getElementById('search').addEventListener('input',render);
+
+document.getElementById('checkoutForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+
+ const form=event.currentTarget;
+ const button=document.getElementById('submitOrder');
+ const status=document.getElementById('orderStatus');
+
+ if(!count()){
+  status.textContent='Корзина пуста.';
+  status.className='status error';
+  return;
+ }
+
+ const data=new FormData(form);
+
+ const payload={
+  buyer_name:String(data.get('buyer_name') || '').trim(),
+  contact:String(data.get('contact') || '').trim(),
+  payment_method:String(data.get('payment_method') || '').trim(),
+  delivery_address:String(data.get('delivery_address') || '').trim(),
+  customer_comment:String(data.get('customer_comment') || '').trim(),
+  items:Object.entries(cart).map(([product_id,quantity])=>({
+   product_id,
+   quantity
+  }))
+ };
+
+ button.disabled=true;
+ button.textContent='Отправляем заказ...';
+
+ status.textContent='Проверяем наличие и оформляем заказ. Не закрывайте страницу.';
+ status.className='status';
+
+ try{
+  const response=await fetch(ORDER_URL,{
+   method:'POST',
+   headers:{
+    'Content-Type':'application/json',
+    'apikey':SUPABASE_KEY
+   },
+   body:JSON.stringify(payload)
+  });
+
+  const result=await response.json().catch(()=>({}));
+
+  if(!response.ok || !result.ok){
+   throw new Error(
+    result.error || 'Не удалось оформить заказ. Попробуйте ещё раз.'
+   );
+  }
+
+  cart={};
+  form.reset();
+
+  document.getElementById('checkoutForm').style.display='none';
+  document.getElementById('checkoutStart').style.display='none';
+
+  status.className='status success';
+  status.textContent='';
+
+  const note=result.notification_sent
+   ? 'Уведомление продавцу отправлено.'
+   : (result.notification_configured
+      ? 'Заказ создан, но уведомление продавцу не отправилось. Продавцу нужно проверить Telegram.'
+      : 'Заказ создан. Уведомления продавцу пока не настроены.');
+
+  document.getElementById('cartItems').innerHTML=
+   `<p class="status success">
+    <b>Заказ успешно оформлен!</b><br>
+    Номер заказа: ${safe(result.order_id)}<br>
+    Сумма: ${money(result.total)}<br>
+    ${safe(note)}
+   </p>`;
+
+  document.getElementById('cartTotal').textContent='Заказ принят';
+  document.getElementById('cartHint').textContent=
+   'Спасибо за покупку! Продавец свяжется с вами.';
+
+  await loadProducts();
+
+ }catch(error){
+  status.textContent=error.message ||
+   'Ошибка соединения. Проверьте интернет и попробуйте снова.';
+  status.className='status error';
+
+ }finally{
+  button.disabled=false;
+  button.textContent='Подтвердить заказ';
+ }
+});
 
 loadProducts();
 </script>
