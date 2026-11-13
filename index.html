@@ -1,1 +1,157 @@
 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#111111">
+<title>Pixel Shop</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f6f6f6;color:#171717;font-family:Arial,sans-serif}
+header{background:#111;color:white;padding:23px 18px 25px;border-radius:0 0 24px 24px}
+.top{display:flex;justify-content:space-between;align-items:center}
+.logo{font-size:25px;font-weight:800;letter-spacing:-1px}
+.logo span{color:#b6f36b}
+.sub{color:#aaa;font-size:12px;margin-top:5px}
+.cart-btn{background:#b6f36b;border:0;border-radius:14px;padding:11px 14px;font-weight:bold}
+.search{margin-top:20px;width:100%;padding:14px;border:0;border-radius:12px;font-size:15px}
+main{padding:20px 15px 100px;max-width:700px;margin:auto}
+h2{font-size:19px;margin:23px 0 13px}
+.categories{display:flex;gap:9px;overflow-x:auto;padding-bottom:5px}
+.cat{border:1px solid #ddd;background:white;padding:11px 15px;border-radius:30px;white-space:nowrap}
+.cat.active{background:#171717;color:white;border-color:#171717}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.product{background:white;border-radius:17px;overflow:hidden;position:relative}
+.product img{width:100%;height:145px;object-fit:cover;background:#e9e9e9}
+.info{padding:11px}
+.name{font-weight:bold;font-size:14px}
+.desc{font-size:12px;color:#888;margin-top:5px}
+.price{font-weight:bold;margin-top:10px;font-size:15px}
+.old{font-size:12px;color:#999;text-decoration:line-through;margin-left:5px;font-weight:normal}
+.discount{position:absolute;top:9px;left:9px;background:#b6f36b;padding:5px 8px;border-radius:8px;font-size:11px;font-weight:bold}
+.add{width:100%;margin-top:10px;border:0;background:#171717;color:white;padding:11px;border-radius:10px;font-weight:bold}
+.empty{color:#888;font-size:14px}
+.bottom{position:fixed;bottom:0;left:0;right:0;background:white;padding:12px 16px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -3px 15px #00000010;display:flex;justify-content:space-between;align-items:center}
+.bottom button{background:#171717;color:white;border:0;padding:13px 20px;border-radius:12px;font-weight:bold}
+.modal{display:none;position:fixed;inset:0;background:#0008;z-index:5;align-items:flex-end}
+.panel{background:white;width:100%;max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:20px 17px calc(25px + env(safe-area-inset-bottom))}
+.panel h2{margin-top:5px}
+.close{float:right;border:0;background:#eee;border-radius:50%;width:34px;height:34px;font-size:18px}
+.cart-line{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #eee;padding:13px 0;font-size:14px}
+.qty{display:flex;align-items:center;gap:10px;margin-top:8px}
+.qty button{border:0;background:#eee;border-radius:8px;padding:5px 10px}
+input,textarea,select{width:100%;padding:13px;margin:6px 0 12px;border:1px solid #ddd;border-radius:10px;font-size:15px}
+label{font-size:13px;font-weight:bold}
+.checkout{width:100%;background:#171717;color:white;border:0;border-radius:12px;padding:15px;font-weight:bold;margin-top:12px}
+.total{font-size:18px;font-weight:bold;margin:17px 0}
+@media(min-width:600px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<header>
+ <div class="top">
+  <div>
+   <div class="logo">PIXEL<span>.</span></div>
+   <div class="sub">ТВОЙ МАГАЗИН В TELEGRAM</div>
+  </div>
+  <button class="cart-btn" onclick="openCart()">🛒 <span id="cartCount">0</span></button>
+ </div>
+ <input class="search" id="search" placeholder="Поиск товаров..." oninput="render()">
+</header>
+<main>
+ <h2>Категории</h2>
+ <div class="categories" id="categories"></div>
+ <h2 id="sectionTitle">Популярные товары</h2>
+ <div class="grid" id="products"></div>
+</main>
+<div class="bottom">
+ <div><small>Ваша корзина</small><br><b id="bottomTotal">0,00 BYN</b></div>
+ <button onclick="openCart()">Открыть корзину →</button>
+</div>
+
+<div class="modal" id="modal" onclick="if(event.target===this)closeCart()">
+ <div class="panel">
+  <button class="close" onclick="closeCart()">×</button>
+  <h2>🛒 Корзина</h2>
+  <div id="cartItems"></div>
+  <div class="total" id="cartTotal">Итого: 0,00 BYN</div>
+  <h2>Оформление заказа</h2>
+  <form id="orderForm">
+   <label>Ваше имя</label>
+   <input id="customer" required placeholder="Как к вам обращаться?">
+   <label>Телефон или Telegram</label>
+   <input id="contact" required placeholder="@username или номер телефона">
+   <label>Способ оплаты</label>
+   <select id="payment">
+    <option>Наличными при получении</option>
+    <option>Перевод на карту</option>
+    <option>Другой способ</option>
+   </select>
+   <label>Адрес доставки</label>
+   <textarea id="address" required placeholder="Город, улица, дом..."></textarea>
+   <label>Комментарий к заказу</label>
+   <textarea id="comment" placeholder="Дополнительные пожелания"></textarea>
+   <button class="checkout" type="submit">Оформить заказ</button>
+  </form>
+  <p style="font-size:11px;color:#888">Демонстрационная версия. Заказы пока не отправляются продавцу.</p>
+ </div>
+</div>
+<script>
+const products=[
+ {id:1,name:"Товар №1",category:"Категория 1",price:25,old:30,desc:"Описание товара",image:"https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600"},
+ {id:2,name:"Товар №2",category:"Категория 1",price:40,old:0,desc:"Описание товара",image:"https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600"},
+ {id:3,name:"Товар №3",category:"Категория 2",price:15,old:20,desc:"Описание товара",image:"https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600"},
+ {id:4,name:"Товар №4",category:"Категория 2",price:55,old:0,desc:"Описание товара",image:"https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600"}
+];
+let selected="Все";
+let cart={};
+const money=n=>n.toFixed(2).replace(".",",")+" BYN";
+function categories(){
+ const names=["Все",...new Set(products.map(p=>p.category))];
+ document.getElementById("categories").innerHTML=names.map(n=>
+ `<button class="cat ${selected===n?'active':''}" onclick="choose('${n}')">${n}</button>`).join("");
+}
+function choose(n){selected=n;render()}
+function render(){
+ categories();
+ const q=document.getElementById("search").value.toLowerCase();
+ const items=products.filter(p=>(selected==="Все"||p.category===selected)&&p.name.toLowerCase().includes(q));
+ document.getElementById("sectionTitle").textContent=selected==="Все"?"Популярные товары":selected;
+ document.getElementById("products").innerHTML=items.map(p=>`
+ <div class="product">
+ ${p.old>p.price?`<span class="discount">-${Math.round((1-p.price/p.old)*100)}%</span>`:""}
+ <img src="${p.image}" alt="${p.name}" onerror="this.style.display='none'">
+ <div class="info">
+ <div class="name">${p.name}</div>
+ <div class="desc">${p.desc}</div>
+ <div class="price">${money(p.price)} ${p.old>p.price?`<span class="old">${money(p.old)}</span>`:""}</div>
+ <button class="add" onclick="add(${p.id})">Добавить в корзину</button>
+ </div></div>`).join("")||'<p class="empty">Товаров пока нет</p>';
+ updateCart();
+}
+function add(id){cart[id]=(cart[id]||0)+1;updateCart()}
+function change(id,n){cart[id]=(cart[id]||0)+n;if(cart[id]<=0)delete cart[id];updateCart()}
+function total(){return products.reduce((s,p)=>s+p.price*(cart[p.id]||0),0)}
+function count(){return Object.values(cart).reduce((a,b)=>a+b,0)}
+function updateCart(){
+ document.getElementById("cartCount").textContent=count();
+ document.getElementById("bottomTotal").textContent=money(total());
+ document.getElementById("cartTotal").textContent="Итого: "+money(total());
+ document.getElementById("cartItems").innerHTML=count()?products.filter(p=>cart[p.id]).map(p=>`
+ <div class="cart-line"><div><b>${p.name}</b><br>${money(p.price)}<div class="qty">
+ <button onclick="change(${p.id},-1)">−</button>${cart[p.id]}<button onclick="change(${p.id},1)">+</button>
+ </div></div><b>${money(p.price*cart[p.id])}</b></div>`).join(""):'<p class="empty">Корзина пока пуста</p>';
+}
+function openCart(){document.getElementById("modal").style.display="flex";updateCart()}
+function closeCart(){document.getElementById("modal").style.display="none"}
+document.getElementById("orderForm").addEventListener("submit",e=>{
+ e.preventDefault();
+ if(!count()){alert("Сначала добавьте товары в корзину");return}
+ alert("Демонстрационный заказ сформирован. Подключим отправку продавцу на следующем этапе.");
+});
+render();
+</script>
+</body>
+</html>
+
