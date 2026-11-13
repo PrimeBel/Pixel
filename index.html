@@ -153,5 +153,18 @@ alert("Демонстрационный заказ сформирован. От�
 });
 render();
 </script>
+ 
+<script type="module">
+  import { createClient } from
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+  const SUPABASE_URL = 'https://iuodcfroelueapetggog.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_9oJI3ki12TygVlpMwPSZ6Q_NyTby9q7';
+
+  window.shopDB = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  console.log('Подключение к базе данных готово');
+</script>
+
 </body>
 </html>
