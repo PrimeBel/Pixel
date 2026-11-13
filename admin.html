@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIXEL — Админ-панель</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:20px;background:#17191d;color:#f5f5f5;font-family:Arial,sans-serif}
+main{max-width:850px;margin:auto}
+h1,h2{color:#fff}
+input,textarea,select,button{width:100%;padding:12px;margin:6px 0;border-radius:8px;border:1px solid #444;background:#25282e;color:white;font-size:16px}
+button{background:#e2b44a;color:#17191d;font-weight:bold;border:0;cursor:pointer}
+button.secondary{background:#444;color:white}
+button.danger{background:#9b3434;color:white}
+.card{background:#202329;padding:16px;border-radius:12px;margin:14px 0}
+.item{border-bottom:1px solid #444;padding:12px 0}
+.hidden{display:none}
+small{color:#aaa}
+</style>
+</head>
+<body>
+<main>
+<h1>PIXEL — Админ-панель</h1>
+
+<section id="login" class="card">
+<h2>Вход администратора</h2>
+<input id="email" type="email" placeholder="Email">
+<input id="password" type="password" placeholder="Пароль">
+<button onclick="signIn()">Войти</button>
+<p id="loginMsg"></p>
+</section>
+
+<section id="panel" class="hidden">
+<button class="secondary" onclick="signOut()">Выйти</button>
+
+<div class="card">
+<h2>Категории</h2>
+<input id="catName" placeholder="Название категории">
+<textarea id="catDesc" placeholder="Описание"></textarea>
+<input id="catImage" placeholder="Ссылка на изображение (HTTPS)">
+<input id="catSort" type="number" placeholder="Порядок отображения" value="0">
+<button onclick="addCategory()">Добавить категорию</button>
+<div id="categories"></div>
+</div>
+
+<div class="card">
+<h2>Товары</h2>
+<input id="productName" placeholder="Название товара">
+<select id="productCategory"></select>
+<textarea id="productDesc" placeholder="Описание товара"></textarea>
+<input id="productPrice" type="number" step="0.01" placeholder="Цена BYN">
+<input id="productDiscount" type="number" placeholder="Скидка в процентах" value="0">
+<input id="productStock" type="number" placeholder="Количество на складе" value="0">
+<input id="productImage" placeholder="Ссылка на фото (HTTPS)">
+<input id="productSort" type="number" placeholder="Порядок отображения" value="0">
+<button onclick="addProduct()">Добавить товар</button>
+<div id="products"></div>
+</div>
+
+<div class="card">
+<h2>Заказы</h2>
+<button class="secondary" onclick="loadOrders()">Обновить заказы</button>
+<div id="orders"></div>
+</div>
+</section>
+</main>
+
+<script>
+const SUPABASE_URL = "https://iuodcfroelueapetggog.supabase.co";
+const SUPABASE_KEY = "sb_publishable_9oJI3ki12TygVlpMwPSZ6Q_NyTby9q7";
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const ADMIN_EMAIL = "jete0550@gmail.com";
+
+let categoriesCache = [];
+
+async function signIn(){
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const msg = document.getElementById("loginMsg");
+
+  if(email.toLowerCase() !== ADMIN_EMAIL){
+    msg.textContent = "Доступ разрешён только администратору.";
+    return;
+  }
+
+  const {error} = await db.auth.signInWithPassword({email,password});
+  if(error){
+    msg.textContent = error.message;
+    return;
+  }
+  await checkUser();
+}
+
+async function signOut(){
+  await db.auth.signOut();
+  location.reload();
+}
+
+async function checkUser(){
+  const {data:{user}} = await db.auth.getUser();
+
+  if(user && user.email?.toLowerCase() === ADMIN_EMAIL){
+    document.getElementById("login").classList.add("hidden");
+    document.getElementById("panel").classList.remove("hidden");
+    await loadAll();
+  }else{
+    document.getElementById("login").classList.remove("hidden");
+    document.getElementById("panel").classList.add("hidden");
+  }
+}
+
+async function loadAll(){
+  await loadCategories();
+  await loadProducts();
+  await loadOrders();
+}
+
+async function loadCategories(){
+  const {data,error} = await db.from("categories")
+    .select("*").order("sort_order");
+
+  if(error){alert("Ошибка категорий: "+error.message);return;}
+
+  categoriesCache = data || [];
+
+  const select = document.getElementById("productCategory");
+  select.innerHTML = categoriesCache.map(c =>
+    `<option value="${c.id}">${escapeHtml(c.name)}</option>`
+  ).join("");
+
+  document.getElementById("categories").innerHTML =
+    categoriesCache.map(c => `
+      <div class="item">
+        <b>${escapeHtml(c.name)}</b>
+        <button class="danger" onclick="deleteCategory('${c.id}')">Удалить категорию</button>
+      </div>
+    `).join("");
+}
+
+async function addCategory(){
+  const name = document.getElementById("catName").value.trim();
+  if(!name){alert("Введи название категории");return;}
+
+  const {error} = await db.from("categories").insert({
+    name,
+    description:document.getElementById("catDesc").value,
+    image_url:document.getElementById("catImage").value.trim() || null,
+    sort_order:Number(document.getElementById("catSort").value) || 0,
+    is_active:true
+  });
+
+  if(error){alert(error.message);return;}
+
+  document.getElementById("catName").value="";
+  document.getElementById("catDesc").value="";
+  document.getElementById("catImage").value="";
+  await loadCategories();
+}
+
+async function deleteCategory(id){
+  if(!confirm("Удалить категорию?"))return;
+  const {error} = await db.from("categories").delete().eq("id",id);
+  if(error){alert(error.message);return;}
+  await loadCategories();
+}
+
+async function addProduct(){
+  const name = document.getElementById("productName").value.trim();
+  const category = document.getElementById("productCategory").value;
+  const price = Number(document.getElementById("productPrice").value);
+
+  if(!name || !category || !Number.isFinite(price) || price < 0){
+    alert("Заполни название, категорию и правильную цену.");
+    return;
+  }
+
+  const {error} = await db.from("products").insert({
+    name,
+    category_id:category,
+    description:document.getElementById("productDesc").value,
+    price,
+    discount_percent:Number(document.getElementById("productDiscount").value) || 0,
+    stock:Number(document.getElementById("productStock").value) || 0,
+    image_url:document.getElementById("productImage").value.trim() || null,
+    sort_order:Number(document.getElementById("productSort").value) || 0,
+    is_active:true
+  });
+
+  if(error){alert(error.message);return;}
+
+  document.getElementById("productName").value="";
+  document.getElementById("productDesc").value="";
+  document.getElementById("productPrice").value="";
+  document.getElementById("productImage").value="";
+  await loadProducts();
+}
+
+async function loadProducts(){
+  const {data,error} = await db.from("products")
+    .select("*, categories(name)")
+    .order("sort_order");
+
+  if(error){alert("Ошибка товаров: "+error.message);return;}
+
+  document.getElementById("products").innerHTML = (data || []).map(p => `
+    <div class="item">
+      <b>${escapeHtml(p.name)}</b><br>
+      <small>${escapeHtml(p.categories?.name || "Без категории")} · ${p.price} BYN · Остаток: ${p.stock}</small>
+      <p>${escapeHtml(p.description || "")}</p>
+      <button class="secondary" onclick="editProduct('${p.id}')">Изменить</button>
+      <button class="danger" onclick="deleteProduct('${p.id}')">Удалить</button>
+    </div>
+  `).join("");
+
+  window.productsCache = data || [];
+}
+
+async function editProduct(id){
+  const p = (window.productsCache || []).find(x => x.id === id);
+  if(!p)return;
+
+  const name = prompt("Название товара:",p.name);
+  if(name === null)return;
+  const price = prompt("Цена BYN:",p.price);
+  if(price === null)return;
+  const stock = prompt("Количество на складе:",p.stock);
+  if(stock === null)return;
+  const discount = prompt("Скидка в процентах:",p.discount_percent);
+  if(discount === null)return;
+  const description = prompt("Описание:",p.description || "");
+  if(description === null)return;
+  const image = prompt("Ссылка на фото HTTPS:",p.image_url || "");
+  if(image === null)return;
+
+  const {error} = await db.from("products").update({
+    name:name.trim(),
+    price:Number(price),
+    stock:Number(stock),
+    discount_percent:Number(discount),
+    description,
+    image_url:image.trim() || null
+  }).eq("id",id);
+
+  if(error){alert(error.message);return;}
+  await loadProducts();
+}
+
+async function deleteProduct(id){
+  if(!confirm("Удалить товар?"))return;
+  const {error} = await db.from("products").delete().eq("id",id);
+  if(error){alert(error.message);return;}
+  await loadProducts();
+}
+
+async function loadOrders(){
+  const box = document.getElementById("orders");
+  box.innerHTML = "Загрузка заказов...";
+
+  const {data:orders,error} = await db.from("orders")
+    .select("*").order("created_at",{ascending:false}).limit(100);
+
+  if(error){box.textContent=error.message;return;}
+
+  if(!orders || !orders.length){
+    box.textContent="Заказов пока нет.";
+    return;
+  }
+
+  const ids = orders.map(o=>o.id);
+  const {data:items,itemError} = await db.from("order_items")
+    .select("*").in("order_id",ids);
+
+  if(itemError){box.textContent=itemError.message;return;}
+
+  box.innerHTML = orders.map(o=>{
+    const orderItems = (items || []).filter(i=>i.order_id===o.id);
+    return `
+      <div class="item">
+        <b>Заказ #${escapeHtml(String(o.id))}</b>
+        <p>Дата: ${escapeHtml(o.created_at || "")}</p>
+        <p>Покупатель: ${escapeHtml(o.buyer_name || "")}</p>
+        <p>Контакт: ${escapeHtml(o.contact || "")}</p>
+        <p>Telegram: ${escapeHtml(o.telegram_username || "")}</p>
+        <p>Оплата: ${escapeHtml(o.payment_method || "")}</p>
+        <p>Адрес: ${escapeHtml(o.delivery_address || "")}</p>
+        <p>Комментарий: ${escapeHtml(o.customer_comment || "")}</p>
+        <p>Товары: ${orderItems.map(i =>
+          escapeHtml(i.product_name)+" × "+i.quantity
+        ).join(", ")}</p>
+        <b>Сумма: ${escapeHtml(String(o.total ?? ""))} ${escapeHtml(o.currency || "BYN")}</b>
+        <p>Статус: ${escapeHtml(o.status || "new")}</p>
+        <select id="status-${o.id}">
+          <option value="new">Новый</option>
+          <option value="processing">В обработке</option>
+          <option value="completed">Выполнен</option>
+          <option value="cancelled">Отменён</option>
+        </select>
+        <button onclick="updateStatus('${o.id}')">Сохранить статус</button>
+      </div>
+    `;
+  }).join("");
+
+  orders.forEach(o=>{
+    const s=document.getElementById("status-"+o.id);
+    if(s)s.value=o.status || "new";
+  });
+}
+
+async function updateStatus(id){
+  const status = document.getElementById("status-"+id).value;
+  const {error} = await db.from("orders").update({status}).eq("id",id);
+  if(error){alert(error.message);return;}
+  alert("Статус заказа обновлён.");
+  await loadOrders();
+}
+
+function escapeHtml(value){
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[c]);
+}
+
+db.auth.onAuthStateChange(()=>checkUser());
+checkUser();
+</script>
+</body>
+</html>
